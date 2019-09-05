@@ -1,0 +1,124 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "Mats"
+date: "5 september 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Executive summary
+The project goal is to make a prediction of how the people in the data set performed on a specific training exercise. The data set consists of data from six (6) participants. The data comes from accelerometers on the belt, forearm, arm, and dumbbell and is measured when they have performed training exercises during a specific period of time. The participants were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+Three machine learning algorithms: *Decision tree*, *Generalized boosted regression* and *Random forest*, were evaluated to find the one with the best accuracy for this specific use case. In the training set the variable named *classe* is used to specify how well the participants carried out the exercise, from A (the best) to E (the worst). This was the variable used to model as a function of all the other variables in the algorithms which were evaluated. Random forest was found to have the highest accuracy (over 99 %). This was used to predict how well the training exercises in the test set (20 exercise sessions) were carried out.
+
+## Preparation
+
+## Load packages
+```{r, warning=FALSE, message=FALSE}
+library(caret)
+library(rpart)
+library(lattice)
+library(ggplot2)
+```
+
+## Download and load data set
+```{r, warning=FALSE, message=FALSE, cache=TRUE}
+urlTraining <- url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
+training <- read.csv(urlTraining, header = TRUE)
+
+urlTest <- url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+test <- read.csv(urlTest, header = TRUE)
+```
+
+## Clean data set
+The training and test sets initially had the following dimensions:
+```{r}
+dim(training)
+dim(test)
+```
+
+However, they contain many variables with NA values which are not of use or could cause misleading results. Also, the first seven columns contain information which is not useful in our model, for example person names (persons doing the exercise) and time stamps.
+
+```{r}
+removeColumns <- which(colSums(is.na(training) | training == "")
+                        > 0.9 *dim(training)[1]) 
+training <- training[, -removeColumns]
+training <- training[, -c(1:7)]
+
+removeColumns <- which(colSums(is.na(test) | test == "")
+                        > 0.9 *dim(test)[1]) 
+test <- test[, -removeColumns]
+test <- test[, -1]
+```
+
+After removing variables with NA values and other unnecessary variables, the training and test sets now have the following dimensions.
+```{r}
+dim(training)
+dim(test)
+```
+
+# Machine learning algorithm evaluation
+We start with splitting the training data set into two parts: *trainPart* and *testPart*.
+
+```{r}
+set.seed(123456)
+dataPartition <- createDataPartition(training$classe, p = 0.7, list = FALSE)
+trainPart <- training[dataPartition,]
+testPart <- training[-dataPartition,]
+```
+
+Three commonly used algorithms are chosen for evaluation: *Decision tree*, *Generalized boosted regression* and *Random forest*.
+
+In the training, cross-validation (cv) was used with five (5) folds. After the training, the test part of the initial training data set is used to make the predictions and a confusion matrix is used to control the accuracy when using the different algorithms.
+
+## Decision tree
+```{r, cache=TRUE}
+rpartModel <- train(classe ~ ., data = trainPart, method = "rpart", trControl = trainControl(method = 'cv', number = 5))
+rpartModel
+```
+
+```{r, cache=TRUE}
+rpartPredTest <- predict(rpartModel, testPart)
+rpartAccuracyTest <- confusionMatrix(rpartPredTest, testPart$classe)
+rpartAccuracyTest
+rpartAccuracyTest$overall[1]
+```
+
+## Generalized boosted regression
+```{r, cache=TRUE}
+gbmModel <- train(classe ~., data = trainPart, method="gbm", trControl = trainControl(method = 'cv', number = 5), verbose = FALSE)
+gbmModel
+```
+
+```{r, cache=TRUE}
+gbmPredTest <- predict(gbmModel, testPart)
+gbmAccuracyTest <- confusionMatrix(gbmPredTest, testPart$classe)
+gbmAccuracyTest
+gbmAccuracyTest$overall[1]
+```
+
+## Random forest
+```{r, cache=TRUE}
+randomFModel = train(classe ~., data = trainPart, method = 'rf', trControl = trainControl(method = 'cv', number = 5), verbose = FALSE)
+randomFModel
+```
+
+```{r, cache=TRUE}
+rfPredTest <- predict(randomFModel, testPart)
+rfAccuracyTest <- confusionMatrix(rfPredTest, testPart$classe)
+rfAccuracyTest
+rfAccuracyTest$overall[1]
+```
+
+## Conclusion - algorithm selection
+When comparing the outcome of the three algorithms evaluated, we clearly see that *Random forest* has the highest performance. It has the highest accuracy, over `r round(rfAccuracyTest$overall[1], 2)*100` %. Second out is *Generalized boosted regression* with an accuracy of close to `r round(gbmAccuracyTest$overall[1], 2)*100` %. *Decision tree* has an outcome which is significantly lower than the other two, approximately `r round(rpartAccuracyTest$overall[1], 2)*100` %.
+
+# Prediction on the test set
+The Random forest model is now used for making a prediction on the test set to predict how well the training exercises in the test set (20 exercise points) were carried out.
+
+```{r, cache=TRUE}
+predict(randomFModel, test)
+```
